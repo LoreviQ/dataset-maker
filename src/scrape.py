@@ -6,18 +6,7 @@ import time
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
-SOURCE = (
-    "https://gelbooru.com/index.php?page=dapi&json=1&s=post&q=index&limit=100&tags={}"
-)
-USER_AGENT = (
-    "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; "
-    "Googlebot/2.1; +http://www.google.com/bot.html) Chrome/93.0.4577.83 Safari/537.36"
-)
-LIMIT = 100
-TOTAL_LIMIT = 1000
-MAX_RES = 4098
-SUPPORTED_TYPES = (".png", ".jpg", ".jpeg")
-INCLUDE_POSTS_WITH_PARENT = True
+from config import CONFIG
 
 
 def get_tags() -> str:
@@ -35,24 +24,30 @@ def get_tags() -> str:
 
 def get_json(url: str) -> dict:
     """Get json from url"""
-    with urlopen(Request(url, headers={"User-Agent": USER_AGENT})) as page:
+    with urlopen(
+        Request(url, headers={"User-Agent": CONFIG["scraping"]["user_agent"]})
+    ) as page:
         return json.load(page)
 
 
 def filter_images(data):
     """Filter images from json"""
     return [
-        p["file_url"] if p["width"] * p["height"] <= MAX_RES**2 else p["sample_url"]
+        (
+            p["file_url"]
+            if p["width"] * p["height"] <= CONFIG["files"]["max_resolution"] ** 2
+            else p["sample_url"]
+        )
         for p in data["post"]
-        if (p["parent_id"] == 0 or INCLUDE_POSTS_WITH_PARENT)
-        and p["file_url"].lower().endswith(SUPPORTED_TYPES)
+        if (p["parent_id"] == 0 or CONFIG["scraping"]["include_posts_with_parent"])
+        and p["file_url"].lower().endswith(CONFIG["files"]["supported_types"])
     ]
 
 
 def download_images() -> None:
     """Download images from source"""
     tags = get_tags()
-    url = SOURCE.format(tags)
+    url = CONFIG["scraping"]["source"].format(tags)
     data = get_json(url)
     count = data["@attributes"]["count"]
 
@@ -77,8 +72,8 @@ def download_images() -> None:
 
     image_urls = set()
     image_urls = image_urls.union(filter_images(data))
-    for i in range(TOTAL_LIMIT // LIMIT):
-        count -= LIMIT
+    for i in range(CONFIG["scraping"]["total_limit"] // CONFIG["scraping"]["limit"]):
+        count -= CONFIG["scraping"]["limit"]
         if count <= 0:
             break
         time.sleep(0.1)
@@ -91,7 +86,11 @@ def download_images() -> None:
 
     print(f"🌐 Saved links to {scrape_file}\n\n🔁 Downloading images...\n")
     old_img_count = len(
-        [f for f in os.listdir(images_folder) if f.lower().endswith(SUPPORTED_TYPES)]
+        [
+            f
+            for f in os.listdir(images_folder)
+            if f.lower().endswith(CONFIG["files"]["supported_types"])
+        ]
     )
 
     for url in image_urls:
@@ -100,7 +99,9 @@ def download_images() -> None:
             if not os.path.exists(filename):
                 print(f"Downloading {url}")
                 with urlopen(
-                    Request(url, headers={"User-Agent": USER_AGENT})
+                    Request(
+                        url, headers={"User-Agent": CONFIG["scraping"]["user_agent"]}
+                    )
                 ) as response:
                     with open(filename, "wb") as f:
                         f.write(response.read())
@@ -111,6 +112,10 @@ def download_images() -> None:
             print(f"Failed to save {filename}: {e}")
 
     new_img_count = len(
-        [f for f in os.listdir(images_folder) if f.lower().endswith(SUPPORTED_TYPES)]
+        [
+            f
+            for f in os.listdir(images_folder)
+            if f.lower().endswith(CONFIG["files"]["supported_types"])
+        ]
     )
     print(f"\n✅ Downloaded {new_img_count - old_img_count} images.")

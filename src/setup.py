@@ -4,7 +4,7 @@ import os
 from pathlib import Path
 
 
-def prepare_project_directory():
+def prepare_project_directory() -> None:
     """Create project directory in home folder and change to it."""
     # Get project name from user
     project_name = input("Enter project name: ")
